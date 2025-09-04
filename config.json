@@ -1,0 +1,46 @@
+{
+  "notes": [
+    {
+      "id": "ai-general",
+      "title": "Intelligence Artificielle",
+      "tags": ["Technologie", "Innovation"],
+      "file": "notes/ai-general.md",
+      "links": ["machine-learning", "neural-networks"]
+    },
+    {
+      "id": "machine-learning",
+      "title": "Machine Learning",
+      "tags": ["IA", "Algorithmes"],
+      "file": "notes/machine-learning.md",
+      "links": ["ai-general", "neural-networks", "data-science"]
+    },
+    {
+      "id": "neural-networks",
+      "title": "Réseaux de neurones",
+      "tags": ["IA", "Deep Learning"],
+      "file": "notes/neural-networks.md",
+      "links": ["ai-general", "machine-learning", "deep-learning"]
+    },
+    {
+      "id": "data-science",
+      "title": "Data Science",
+      "tags": ["Données", "Analyse"],
+      "file": "notes/data-science.md",
+      "links": ["machine-learning", "big-data"]
+    },
+    {
+      "id": "deep-learning",
+      "title": "Deep Learning",
+      "tags": ["IA", "Neural Networks"],
+      "file": "notes/deep-learning.md",
+      "links": ["neural-networks", "big-data"]
+    },
+    {
+      "id": "big-data",
+      "title": "Big Data",
+      "tags": ["Données", "Infrastructure"],
+      "file": "notes/big-data.md",
+      "links": ["data-science", "deep-learning"]
+    }
+  ]
+}
