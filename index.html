@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Graph - Répertoire</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --green-light: #a8e6a3;
+            --green-soft: #c3f0c0;
+            --green-pale: #e8f5e8;
+            --lilac: #c8a2c8;
+            --lilac-light: #dcc7dc;
+            --lilac-pale: #f3ebf3;
+            --dark-green: #4a7c59;
+            --dark-lilac: #8b5a8c;
+            --text-primary: #2d3436;
+            --text-secondary: #636e72;
+            --bg-primary: #fafafa;
+            --bg-secondary: #ffffff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, var(--green-pale) 0%, var(--lilac-pale) 100%);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Loading Screen */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--green-pale) 0%, var(--lilac-pale) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--green-light);
+            border-top-color: var(--lilac);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: var(--dark-green);
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .error-message {
+            background: rgba(255, 100, 100, 0.1);
+            border: 2px solid #ff6464;
+            color: #d63031;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px;
+            display: none;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            position: relative;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .container.visible {
+            opacity: 1;
+        }
+
+        /* Header */
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(200, 162, 200, 0.2);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(200, 162, 200, 0.1);
+        }
+
+        .logo {
+            font-size: 1.4em;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--dark-green), var(--dark-lilac));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-right: 30px;
+        }
+
+        .search-container {
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 16px;
+            border: 2px solid var(--green-light);
+            border-radius: 20px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--lilac);
+            box-shadow: 0 0 0 3px rgba(200, 162, 200, 0.1);
+        }
+
+        .stats-container {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-left: auto;
+            margin-right: 20px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--dark-green);
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 10px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 20px;
+            background: var(--green-light);
+            color: var(--dark-green);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .toggle-btn.active {
+            background: var(--lilac);
+            color: var(--dark-lilac);
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Main Content Area */
+        .main-content {
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 60px);
+            margin-top: 60px;
+        }
+
+        /* Graph Container */
+        .graph-container {
+            flex: 1;
+            position: relative;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+        }
+
+        #graph {
+            width: 100%;
+            height: 100%;
+        }
+
+        .graph-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: white;
+            color: var(--dark-green);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: var(--green-light);
+            transform: scale(1.1);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 400px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid rgba(200, 162, 200, 0.2);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar.hidden {
+            transform: translateX(100%);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(200, 162, 200, 0.2);
+            background: linear-gradient(135deg, var(--green-pale), var(--lilac-pale));
+        }
+
+        .note-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .note-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .note-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            padding: 4px 12px;
+            background: var(--lilac-light);
+            color: var(--dark-lilac);
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tag:hover {
+            background: var(--lilac);
+            transform: scale(1.05);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .markdown-content {
+            line-height: 1.8;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: var(--dark-green);
+        }
+
+        .markdown-content h1 {
+            font-size: 1.8em;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid var(--green-light);
+        }
+
+        .markdown-content h2 {
+            font-size: 1.4em;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.2em;
+        }
+
+        .markdown-content p {
+            margin-bottom: 1em;
+            color: var(--text-secondary);
+        }
+
+        .markdown-content a {
+            color: var(--dark-lilac);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--lilac);
+            transition: all 0.3s ease;
+        }
+
+        .markdown-content a:hover {
+            color: var(--dark-green);
+            border-color: var(--green-light);
+        }
+
+        .markdown-content code {
+            background: var(--green-pale);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: var(--dark-green);
+        }
+
+        .markdown-content pre {
+            background: var(--green-pale);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid var(--lilac);
+            padding-left: 16px;
+            margin: 1em 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .markdown-content ul, 
+        .markdown-content ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+
+        .markdown-content li {
+            margin-bottom: 0.5em;
+        }
+
+        /* Links Section */
+        .links-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(200, 162, 200, 0.2);
+        }
+
+        .links-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--dark-green);
+            margin-bottom: 12px;
+        }
+
+        .link-item {
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            background: var(--green-pale);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .link-item:hover {
+            background: var(--lilac-pale);
+            transform: translateX(4px);
+        }
+
+        .link-arrow {
+            color: var(--dark-green);
+        }
+
+        /* Node styles */
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            filter: brightness(1.2);
+        }
+
+        .node-label {
+            font-size: 12px;
+            font-weight: 600;
+            pointer-events: none;
+            user-select: none;
+            text-shadow: 0 1px 3px rgba(255,255,255,0.8);
+        }
+
+        .link {
+            stroke: var(--lilac);
+            stroke-opacity: 0.4;
+            stroke-width: 2;
+            transition: all 0.3s ease;
+        }
+
+        .link.highlighted {
+            stroke: var(--dark-lilac);
+            stroke-opacity: 0.8;
+            stroke-width: 3;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            padding: 10px 14px;
+            background: white;
+            border: 2px solid var(--green-light);
+            border-radius: 8px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 300px;
+        }
+
+        .tooltip-title {
+            font-weight: 600;
+            color: var(--dark-green);
+            margin-bottom: 4px;
+        }
+
+        .tooltip-tags {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                right: 0;
+                top: 60px;
+                height: calc(100vh - 60px);
+                width: 100%;
+                z-index: 999;
+            }
+            
+            .header {
+                padding: 0 10px;
+            }
+            
+            .logo {
+                font-size: 1.2em;
+                margin-right: 15px;
+            }
+            
+            .stats-container {
+                display: none;
+            }
+            
+            .view-toggle {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loader"></div>
+        <div class="loading-text">Chargement du graphe...</div>
+    </div>
+
+    <!-- Error Message -->
+    <div class="error-message" id="errorMessage"></div>
+
+    <!-- Main Container -->
+    <div class="container" id="mainContainer">
+        <header class="header">
+            <div class="logo">📊 Knowledge Graph</div>
+            <div class="search-container">
+                <input type="text" class="search-input" id="searchInput" placeholder="Rechercher une entité...">
+            </div>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <span>Nœuds:</span>
+                    <span class="stat-value" id="nodeCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Connexions:</span>
+                    <span class="stat-value" id="linkCount">0</span>
+                </div>
+            </div>
+            <div class="view-toggle">
+                <button class="toggle-btn active" id="graphViewBtn">Graph</button>
+                <button class="toggle-btn" id="listViewBtn">Liste</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="graph-container">
+                <svg id="graph"></svg>
+                <div class="graph-controls">
+                    <button class="control-btn" id="zoomIn" title="Zoom avant">+</button>
+                    <button class="control-btn" id="zoomOut" title="Zoom arrière">−</button>
+                    <button class="control-btn" id="resetView" title="Réinitialiser">⟲</button>
+                </div>
+            </div>
+
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2 class="note-title" id="noteTitle">Sélectionnez une note</h2>
+                    <div class="note-meta" id="noteMeta"></div>
+                    <div class="note-tags" id="noteTags"></div>
+                </div>
+                <div class="sidebar-content">
+                    <div class="markdown-content" id="markdownContent">
+                        <p>Cliquez sur un nœud dans le graphe pour afficher le contenu de la note.</p>
+                    </div>
+                    <div class="links-section" id="linksSection" style="display: none;">
+                        <h3 class="links-title">Connexions</h3>
+                        <div id="linksList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script>
+        // Application principale
+        class KnowledgeGraph {
+            constructor() {
+                this.config = null;
+                this.notesData = {};
+                this.notesContent = {};
+                this.currentNote = null;
+                this.simulation = null;
+                this.svg = null;
+                this.g = null;
+                this.zoom = null;
+            }
+
+            async init() {
+                try {
+                    // Afficher le loader
+                    this.showLoading();
+
+                    // Charger la configuration
+                    await this.loadConfig();
+
+                    // Charger tous les fichiers Markdown
+                    await this.loadAllNotes();
+
+                    // Initialiser le graphe
+                    this.initGraph();
+
+                    // Initialiser les contrôles
+                    this.initControls();
+
+                    // Mettre à jour les stats
+                    this.updateStats();
+
+                    // Cacher le loader et afficher l'app
+                    this.hideLoading();
+                    this.showApp();
+
+                } catch (error) {
+                    this.showError(error.message);
+                    console.error('Erreur d\'initialisation:', error);
+                }
+            }
+
+            showLoading() {
+                document.getElementById('loadingScreen').classList.remove('hidden');
+            }
+
+            hideLoading() {
+                document.getElementById('loadingScreen').classList.add('hidden');
+            }
+
+            showApp() {
+                document.getElementById('mainContainer').classList.add('visible');
+            }
+
+            showError(message) {
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.innerHTML = `
+                    <strong>Erreur de chargement</strong><br>
+                    ${message}<br><br>
+                    Vérifiez que les fichiers config.json et les notes Markdown sont présents.
+                `;
+                errorEl.style.display = 'block';
+                this.hideLoading();
+            }
+
+            async loadConfig() {
+                try {
+                    const response = await fetch('config.json');
+                    if (!response.ok) throw new Error('Impossible de charger config.json');
+                    this.config = await response.json();
+                    
+                    // Transformer en format compatible avec D3
+                    this.notesData = {
+                        nodes: this.config.notes.map(note => ({
+                            id: note.id,
+                            title: note.title,
+                            tags: note.tags,
+                            file: note.file,
+                            links: note.links || []
+                        }))
+                    };
+                } catch (error) {
+                    // Fallback sur des données de démonstration
+                    console.warn('config.json non trouvé, utilisation des données de démonstration');
+                    this.loadDemoData();
+                }
+            }
+
+            loadDemoData() {
+                // Données de démonstration intégrées
+                this.notesData = {
+                    nodes: [
+                        {
+                            id: "demo1",
+                            title: "Note de démonstration",
+                            tags: ["Exemple", "Demo"],
+                            content: "# Note de démonstration\n\nCeci est une note d'exemple. Créez votre propre `config.json` pour personnaliser vos données.",
+                            links: ["demo2"]
+                        },
+                        {
+                            id: "demo2",
+                            title: "Guide d'utilisation",
+                            tags: ["Documentation"],
+                            content: "# Guide d'utilisation\n\n1. Créez un fichier `config.json`\n2. Créez un dossier `notes/` avec vos fichiers Markdown\n3. Déployez sur Vercel",
+                            links: ["demo1"]
+                        }
+                    ]
+                };
+                
+                // Pour les données de démo, le contenu est déjà inclus
+                this.notesData.nodes.forEach(node => {
+                    this.notesContent[node.id] = node.content;
+                });
+            }
+
+            async loadAllNotes() {
+                if (!this.config) return; // Si on utilise les données de démo
+
+                const loadPromises = this.notesData.nodes.map(async (node) => {
+                    try {
+                        const response = await fetch(node.file);
+                        if (response.ok) {
+                            const content = await response.text();
+                            this.notesContent[node.id] = content;
+                        } else {
+                            this.notesContent[node.id] = `# ${node.title}\n\nContenu non disponible.`;
+                        }
+                    } catch (error) {
+                        this.notesContent[node.id] = `# ${node.title}\n\nErreur de chargement du fichier.`;
+                    }
+                });
+
+                await Promise.all(loadPromises);
+            }
+
+            initGraph() {
+                const width = window.innerWidth;
+                const height = window.innerHeight - 60;
+
+                // Créer les liens à partir des données
+                const links = [];
+                this.notesData.nodes.forEach(node => {
+                    if (node.links) {
+                        node.links.forEach(targetId => {
+                            // Éviter les doublons
+                            const existingLink = links.find(l => 
+                                (l.source === node.id && l.target === targetId) ||
+                                (l.source === targetId && l.target === node.id)
+                            );
+                            if (!existingLink) {
+                                links.push({ source: node.id, target: targetId });
+                            }
+                        });
+                    }
+                });
+
+                // Configuration SVG
+                this.svg = d3.select("#graph")
+                    .attr("width", width)
+                    .attr("height", height);
+
+                this.g = this.svg.append("g");
+
+                // Configuration du zoom
+                this.zoom = d3.zoom()
+                    .scaleExtent([0.1, 4])
+                    .on("zoom", (event) => {
+                        this.g.attr("transform", event.transform);
+                    });
+
+                this.svg.call(this.zoom);
+
+                // Force simulation
+                this.simulation = d3.forceSimulation(this.notesData.nodes)
+                    .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+                    .force("charge", d3.forceManyBody().strength(-400))
+                    .force("center", d3.forceCenter(width / 2, height / 2))
+                    .force("collision", d3.forceCollide().radius(60));
+
+                // Créer les liens
+                const link = this.g.append("g")
+                    .selectAll("line")
+                    .data(links)
+                    .enter().append("line")
+                    .attr("class", "link");
+
+                // Créer les nœuds
+                const node = this.g.append("g")
+                    .selectAll("g")
+                    .data(this.notesData.nodes)
+                    .enter().append("g")
+                    .attr("class", "node")
+                    .call(d3.drag()
+                        .on("start", (event, d) => this.dragstarted(event, d))
+                        .on("drag", (event, d) => this.dragged(event, d))
+                        .on("end", (event, d) => this.dragended(event, d)));
+
+                // Ajouter les cercles
+                node.append("circle")
+                    .attr("r", 30)
+                    .attr("fill", d => {
+                        const colors = ["#a8e6a3", "#c8a2c8", "#b8d4e3", "#ffc09f", "#ffee93", "#c3b4f7"];
+                        return colors[Math.abs(d.id.charCodeAt(0) + d.id.charCodeAt(d.id.length - 1)) % colors.length];
+                    })
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 3);
+
+                // Ajouter les labels
+                node.append("text")
+                    .attr("class", "node-label")
+                    .attr("text-anchor", "middle")
+                    .attr("dy", "0.3em")
+                    .text(d => d.title)
+                    .style("fill", "#2d3436")
+                    .style("font-size", "11px");
+
+                // Événements des nœuds
+                node.on("click", (event, d) => this.displayNote(d));
+                node.on("mouseenter", (event, d) => this.showTooltip(event, d));
+                node.on("mouseleave", () => this.hideTooltip());
+
+                // Animation
+                this.simulation.on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node
+                        .attr("transform", d => `translate(${d.x},${d.y})`);
+                });
+
+                // Stocker les références pour le search
+                this.nodes = node;
+                this.links = link;
+            }
+
+            dragstarted(event, d) {
+                if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            dragended(event, d) {
+                if (!event.active) this.simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+
+            displayNote(noteData) {
+                this.currentNote = noteData;
+                
+                document.getElementById("noteTitle").textContent = noteData.title;
+                
+                // Afficher les métadonnées
+                const metaEl = document.getElementById("noteMeta");
+                metaEl.innerHTML = `ID: ${noteData.id} • ${noteData.links ? noteData.links.length : 0} connexions`;
+                
+                // Afficher les tags
+                const tagsContainer = document.getElementById("noteTags");
+                tagsContainer.innerHTML = "";
+                noteData.tags.forEach(tag => {
+                    const tagElement = document.createElement("span");
+                    tagElement.className = "tag";
+                    tagElement.textContent = tag;
+                    tagElement.onclick = () => this.filterByTag(tag);
+                    tagsContainer.appendChild(tagElement);
+                });
+                
+                // Afficher le contenu Markdown
+                const content = this.notesContent[noteData.id] || "Contenu non chargé";
+                const markdownContent = document.getElementById("markdownContent");
+                markdownContent.innerHTML = marked.parse(content);
+                
+                // Afficher les connexions
+                if (noteData.links && noteData.links.length > 0) {
+                    document.getElementById("linksSection").style.display = "block";
+                    const linksList = document.getElementById("linksList");
+                    linksList.innerHTML = "";
+                    
+                    noteData.links.forEach(linkId => {
+                        const linkedNote = this.notesData.nodes.find(n => n.id === linkId);
+                        if (linkedNote) {
+                            const linkItem = document.createElement("div");
+                            linkItem.className = "link-item";
+                            linkItem.innerHTML = `
+                                <span>${linkedNote.title}</span>
+                                <span class="link-arrow">→</span>
+                            `;
+                            linkItem.onclick = () => this.displayNote(linkedNote);
+                            linksList.appendChild(linkItem);
+                        }
+                    });
+                } else {
+                    document.getElementById("linksSection").style.display = "none";
+                }
+                
+                // Afficher la sidebar sur mobile
+                document.getElementById("sidebar").classList.remove("hidden");
+
+                // Highlight les connexions dans le graphe
+                this.highlightConnections(noteData.id);
+            }
+
+            highlightConnections(nodeId) {
+                this.links
+                    .classed("highlighted", d => 
+                        d.source.id === nodeId || d.target.id === nodeId
+                    );
+            }
+
+            filterByTag(tag) {
+                const searchInput = document.getElementById("searchInput");
+                searchInput.value = tag;
+                this.performSearch(tag);
+            }
+
+            showTooltip(event, d) {
+                const tooltip = document.getElementById("tooltip");
+                tooltip.innerHTML = `
+                    <div class="tooltip-title">${d.title}</div>
+                    <div class="tooltip-tags">Tags: ${d.tags.join(", ")}</div>
+                `;
+                tooltip.style.opacity = 1;
+                tooltip.style.left = event.pageX + 10 + "px";
+                tooltip.style.top = event.pageY - 10 + "px";
+            }
+
+            hideTooltip() {
+                document.getElementById("tooltip").style.opacity = 0;
+            }
+
+            initControls() {
+                // Recherche
+                document.getElementById("searchInput").addEventListener("input", (e) => {
+                    this.performSearch(e.target.value);
+                });
+
+                // Zoom controls
+                document.getElementById("zoomIn").addEventListener("click", () => {
+                    this.svg.transition().duration(300).call(this.zoom.scaleBy, 1.3);
+                });
+
+                document.getElementById("zoomOut").addEventListener("click", () => {
+                    this.svg.transition().duration(300).call(this.zoom.scaleBy, 0.7);
+                });
+
+                document.getElementById("resetView").addEventListener("click", () => {
+                    const width = window.innerWidth;
+                    const height = window.innerHeight - 60;
+                    this.svg.transition().duration(300).call(
+                        this.zoom.transform,
+                        d3.zoomIdentity.translate(width / 2, height / 2).scale(1)
+                    );
+                    this.simulation.alpha(0.3).restart();
+                });
+
+                // View toggle
+                document.getElementById("graphViewBtn").addEventListener("click", function() {
+                    this.classList.add("active");
+                    document.getElementById("listViewBtn").classList.remove("active");
+                });
+
+                document.getElementById("listViewBtn").addEventListener("click", function() {
+                    this.classList.add("active");
+                    document.getElementById("graphViewBtn").classList.remove("active");
+                    // TODO: Implémenter la vue liste
+                });
+
+                // Responsive
+                window.addEventListener("resize", () => {
+                    const newWidth = window.innerWidth;
+                    const newHeight = window.innerHeight - 60;
+                    
+                    this.svg.attr("width", newWidth).attr("height", newHeight);
+                    this.simulation.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
+                    this.simulation.alpha(0.3).restart();
+                });
+            }
+
+            performSearch(searchTerm) {
+                const term = searchTerm.toLowerCase();
+                
+                this.nodes.style("opacity", d => {
+                    const matchTitle = d.title.toLowerCase().includes(term);
+                    const matchTags = d.tags.some(tag => tag.toLowerCase().includes(term));
+                    const matchId = d.id.toLowerCase().includes(term);
+                    return (matchTitle || matchTags || matchId || term === "") ? 1 : 0.2;
+                });
+                
+                this.links.style("opacity", d => {
+                    const sourceMatch = d.source.title.toLowerCase().includes(term) || 
+                                      d.source.tags.some(tag => tag.toLowerCase().includes(term));
+                    const targetMatch = d.target.title.toLowerCase().includes(term) || 
+                                      d.target.tags.some(tag => tag.toLowerCase().includes(term));
+                    return (sourceMatch || targetMatch || term === "") ? 0.4 : 0.05;
+                });
+            }
+
+            updateStats() {
+                const nodeCount = this.notesData.nodes.length;
+                const linkCount = this.notesData.nodes.reduce((acc, node) => 
+                    acc + (node.links ? node.links.length : 0), 0) / 2;
+                
+                document.getElementById("nodeCount").textContent = nodeCount;
+                document.getElementById("linkCount").textContent = Math.floor(linkCount);
+            }
+        }
+
+        // Initialiser l'application
+        document.addEventListener('DOMContentLoaded', () => {
+            const app = new KnowledgeGraph();
+            app.init();
+        });
+    </script>
+</body>
+</html>
